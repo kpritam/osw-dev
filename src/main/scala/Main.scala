@@ -1,77 +1,57 @@
-import os.SubProcess
+import Main.unsafeRun
+import zio.blocking.Blocking
+import zio.console.{putStrLn, Console => ZConsole}
+import zio.internal.Platform
+import zio.process.{Command, CommandError}
+import zio.stream.SubscriptionRef
+import zio.{ExitCode, Fiber, URIO, ZIO}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import java.io.File
 
 object Logger {
-  def log(prefixColor: String, prefix: String, msg: String): Unit =
-    println(s"$prefixColor$prefix | ${Console.RESET}$msg")
-
-  def logGreen(msg: String): Unit = println(s"${Console.GREEN}$msg${Console.RESET}")
+  def log(prefixColor: String, prefix: String, msg: String): URIO[ZConsole, Unit] =
+    putStrLn(s"$prefixColor $prefix |${Console.RESET}${msg.replace("[info]", "")}")
 }
 
 object Sbt {
-  private val sbt = "sbt"
+  private val env = Map("INTERFACE_NAME" -> "en0", "AAS_INTERFACE_NAME" -> "en0")
 
-  def run(cwd: os.Path, waitForOutput: String, prefixColor: String, prefix: String, cmd: String*): SubProcess = {
-    Logger.logGreen(s"Starting $prefix")
-    @volatile var finished = false
-    val process =
-      os
-        .proc(sbt, cmd)
-        .spawn(
-          cwd = cwd, stdin = os.Inherit, stderr = os.Inherit,
-          stdout = os.ProcessOutput.Readlines { line =>
-            Logger.log(prefixColor, prefix, line)
-            if (line.contains(waitForOutput)) finished = true
+  def run(prefixColor: String, prefix: String, waitForOutput: String, cmd: String*)(
+      wd: File
+  ): ZIO[ZConsole with Blocking, CommandError, Fiber.Runtime[CommandError, ExitCode]] =
+    for {
+      process <- Command("sbt", cmd: _*).workingDirectory(wd).env(env).run
+      fiber   <- process.exitCode.fork
+      _       <- ZIO.succeed(Platform.addShutdownHook(() => unsafeRun(fiber.interrupt)))
+      stream  <- ZIO.succeed(process.stdout.linesStream)
+      ref     <- SubscriptionRef.make(false)
+      _ <-
+        stream
+          .mapM { line =>
+            val bool = line.contains(waitForOutput)
+            Logger.log(prefixColor, prefix, line) *> ref.ref.set(bool).when(bool)
           }
-        )
-    sys.addShutdownHook(process.destroyForcibly())
-
-    while (!finished) {
-      Thread.sleep(100)
-    }
-
-    Logger.logGreen(s"Started $prefix")
-    process
-  }
+          .runDrain
+          .forkDaemon
+      _ <- ref.changes.takeUntil(identity).runDrain
+    } yield fiber
 }
 
-object Main extends App {
-  val wd = os.pwd
-  val csw = wd / "csw"
-  val esw = wd / "esw"
+object Main extends zio.App {
+  private val pwd = System.getProperty("user.dir")
+  private val csw = new File(pwd + "/csw")
+  private val esw = new File(pwd + "/esw")
 
-  val cswServices =
-    Sbt.run(
-      cwd = csw,
-      waitForOutput = "Server online at",
-      prefixColor = Console.YELLOW,
-      prefix = "CSW-SERVICES",
-      cmd = "csw-services/run start -c"
-    )
-
-  val eswServices =
-    Sbt.run(
-      cwd = esw,
-      waitForOutput = "Server online at",
-      prefixColor = Console.MAGENTA,
-      prefix = "ESW-SERVICES",
-      cmd = "esw-services/run start-eng-ui-services"
-    )
-
-  // if any of the process exits, then kill other
-  val f1 = Future {
-    cswServices.join()
-    eswServices.destroyForcibly()
+  private val program = {
+    for {
+      cswFiber <- Sbt.run(Console.YELLOW, "CSW-SERVICES", "Server online at", "csw-services/run start -c")(csw)
+      eswFiber <- Sbt
+        .run(Console.MAGENTA, "ESW-SERVICES", "Server online at", "esw-services/run start-eng-ui-services")(esw)
+      _ <- eswFiber.join
+      _ <- cswFiber.join
+    } yield ()
   }
 
-  val f2 = Future {
-    eswServices.join()
-    cswServices.destroyForcibly()
-  }
-
-  Await.result(f2, Duration.Inf)
-  Await.result(f1, Duration.Inf)
+  override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] =
+    program.exitCode
 }
