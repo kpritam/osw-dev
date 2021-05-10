@@ -44,8 +44,7 @@ object Main extends zio.App {
   private val program = for {
     cswFiber <- Sbt.run(Console.YELLOW, "CSW-SERVICES", "Server online at", "csw-services/run start -c")(csw)
     eswFiber <- Sbt.run(Console.MAGENTA, "ESW-SERVICES", "Server online at", "esw-services/run start-eng-ui-services")(esw)
-    _        <- eswFiber.join
-    _        <- cswFiber.join
+    _        <- cswFiber.zip(eswFiber).join
   } yield ()
 
   override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] =
