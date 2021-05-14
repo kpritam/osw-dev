@@ -1,6 +1,6 @@
 package dev.utils
 
-object Environment {
+object Environment:
   private val env         = sys.env ++ sys.props
   val InterfaceNameKey    = "INTERFACE_NAME"
   val AasInterfaceNameKey = "AAS_INTERFACE_NAME"
@@ -16,4 +16,3 @@ object Environment {
       AasInterfaceNameKey -> AasInterfaceName,
       TmtLogHomeKey       -> TmtLogHome
     )
-}

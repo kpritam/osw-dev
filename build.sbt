@@ -1,6 +1,6 @@
-scalaVersion := "2.13.5"
+scalaVersion := "3.0.0"
 name := "tmt-mono"
 version := "1.0"
 
-libraryDependencies += "com.lihaoyi"                %% "os-lib"   % "0.7.3"
-libraryDependencies += "com.github.alexarchambault" %% "case-app" % "2.0.4"
+libraryDependencies += ("com.lihaoyi" %% "os-lib" % "0.7.3").cross(CrossVersion.for3Use2_13)
+

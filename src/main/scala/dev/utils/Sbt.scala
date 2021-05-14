@@ -3,10 +3,10 @@ package dev.utils
 import dev.models.Submodule
 import os.SubProcess
 
-object Sbt {
+object Sbt:
   private val sbt = "sbt"
 
-  def run(submodule: Submodule, waitForOutput: String, cmd: String*): Option[SubProcess] = {
+  def run(submodule: Submodule, waitForOutput: String, cmd: String*): Option[SubProcess] =
     Logger.logGreen(s"========= Starting ${submodule.name}-services =========")
     @volatile var finished = false
 
@@ -17,12 +17,10 @@ object Sbt {
           cwd = submodule.dir,
           stdout = os.ProcessOutput.Readlines { line =>
             Logger.log(submodule, line)
-            if (line.contains(waitForOutput)) finished = true
+            if line.contains(waitForOutput) then finished = true
           }
         )
 
     sys.addShutdownHook(process.destroyForcibly())
-    while (!finished && process.isAlive()) Thread.sleep(100)
-    if (process.isAlive()) Some(process) else None
-  }
-}
+    while !finished && process.isAlive() do Thread.sleep(100)
+    if process.isAlive() then Some(process) else None
