@@ -18,34 +18,23 @@ enum TMTRunnerCommand:
   case Init
 
 object GitExample extends App:
-  val liveFlag: Options[Boolean] = Options.bool("live", false)
+  val liveFlag: Options[Boolean]         = Options.bool("live", false)
+  def command(name: String, doc: String) = Command(name, Options.none, Args.none, HelpDoc.p(doc))
 
   val start =
-    Command("start", liveFlag, Args.none, HelpDoc.Paragraph(text("Start CSW and ESW Services")))
+    Command("start", liveFlag, Args.none, HelpDoc.p("Start CSW and ESW Services"))
       .map { case (live, _) => TMTRunnerCommand.Start(live) }
 
-  val init = Command(
-    "init",
-    Options.none,
-    Args.none,
-    HelpDoc.Paragraph(text("Initializes submodules for the first time"))
-  ).map(_ => TMTRunnerCommand.Init)
+  val init = command("init", "Initializes submodules for the first time").as(TMTRunnerCommand.Init)
 
-  val printVersions = Command(
-    "print-versions",
-    Options.none,
-    Args.none,
-    HelpDoc.Paragraph(text("Prints versions compatibility table"))
-  ).map(_ => TMTRunnerCommand.PrintVersions)
+  val printVersions = command("print-versions", "Prints version compatibility table").as(
+    TMTRunnerCommand.PrintVersions
+  )
 
-  val updateSubmodules = Command(
-    "update-submodules",
-    Options.none,
-    Args.none,
-    HelpDoc.Paragraph(text("Updates all the submodules"))
-  ).map(_ => TMTRunnerCommand.UpdateSubmodules)
+  val updateSubmodules =
+    command("update-submodules", "Updates all the submodules").as(TMTRunnerCommand.UpdateSubmodules)
 
-  val tmt = Command("tmt", Options.none, Args.none, HelpDoc.Header(text("TMT runner"), 2))
+  val tmt = Command("tmt", Options.none, Args.none, HelpDoc.h2("TMT runner"))
     .subcommands(start | init | printVersions | updateSubmodules)
     .map(_._2)
 
